@@ -1,5 +1,6 @@
 # importing the modules
 import turtle, time, pygame, random, sys, _tkinter
+import curved_paths  # NEW: load our curved_paths.py file which has polynomial path functions
 
 # intialising the mixer
 pygame.mixer.init()
@@ -76,6 +77,26 @@ except TypeError:
     print('\nThanks for playing!')
     sys.exit()
 
+# NEW: Ask the player which enemy path to use
+try:
+    path_choice = int(win.numinput(
+        'Choose Enemy Path',
+        '1 = Straight Down\n'
+        '2 = Curves\n'
+        '3 = S-Curve\n'
+        '4 = Swoop\n'
+        '5 = Zigzag\n'
+        '6 = Mix All!\n\n'
+        'Pick a path (1-6)',
+        minval=1, maxval=6))
+    # STEP 1 of 3: Player picked a number (1-6), now we look up which polynomial
+    # functions go with that number (from path_choices dict in curved_paths.py)
+    # and set curved_paths.paths to that list
+    curved_paths.paths = curved_paths.path_choices[path_choice]  # NEW: update the paths list based on player's choice
+except TypeError:
+    print('\nThanks for playing!')
+    sys.exit()
+
 def leftkeypress():
     global moveShip
     moveShip = -4
@@ -115,6 +136,11 @@ turtle.onkey(start_ending_game, 'Escape')
 turtle.onkey(shoot_bullet, 'space')
 
 
+# NEW: These 3 lists store info about each enemy's curved path
+enemy_start_x = []    # NEW: remembers where each enemy started on the x-axis
+enemy_start_y = []    # NEW: remembers where each enemy started on the y-axis
+enemy_path = []       # NEW: which polynomial function each enemy follows
+
 def spawnEnemies():
     global enemy_list
     for i in range(1,enems+1):
@@ -122,11 +148,18 @@ def spawnEnemies():
         e.hideturtle()
         e.shape('assets/enemy.gif')
         e.penup()
-        e.goto(random.randint(-300, 300), 800*i)
+        start_x = random.randint(-300, 300)  # NEW: save the random x into a variable so we can remember it
+        start_y = 800*i                      # NEW: save the y into a variable so we can remember it
+        e.goto(start_x, start_y)             # CHANGED: use our saved variables instead of inline values
         e.speed(5)
         e.showturtle()
 
         enemy_list.append(e)
+        enemy_start_x.append(start_x)   # NEW: remember this enemy's starting x position
+        enemy_start_y.append(start_y)    # NEW: remember this enemy's starting y position
+        # STEP 2 of 3: Each enemy randomly picks one path function from the list
+        # we set in Step 1 (e.g. if player chose 3, this picks from [s_curve])
+        enemy_path.append(random.choice(curved_paths.paths))  # NEW: pick a random path from curved_paths.py
     return enemy_list
         
 def disbetwcors(x1, x2):
@@ -220,9 +253,24 @@ try:
 
         for enemy in enemy_list:
             if (enemy.ycor()) > -300:
+                # Move enemy down
                 enemy.setheading(270)
-                enemy.forward(3)           
-                
+                enemy.forward(3)
+
+                # --- NEW: CURVED PATH (using polynomials!) ---
+                screen_top = 300                                   # NEW: top of the visible screen
+                screen_bottom = -300                               # NEW: bottom of the visible screen
+                visible_distance = screen_top - screen_bottom      # NEW: 600 pixels of visible area
+                if enemy.ycor() <= screen_top:                     # NEW: only start curving once enemy enters the screen
+                    t = (screen_top - enemy.ycor()) / visible_distance  # NEW: t = 0.0 at top of screen, 1.0 at bottom
+                    t = max(0.0, min(1.0, t))                      # NEW: clamp t so it stays between 0 and 1
+                    # STEP 3 of 3: Call the polynomial function that was picked in Step 2
+                    # e.g. if enemy got s_curve, this calls: 800 * t³ - 600 * t²
+                    x_offset = enemy_path[enemy_index](t)          # NEW: call the polynomial function! returns how far to shift sideways
+                    new_x = enemy_start_x[enemy_index] + x_offset  # NEW: new x = starting x + the curve offset
+                    new_x = max(-380, min(380, new_x))             # NEW: keep enemy inside the screen boundaries
+                    enemy.setx(new_x)                              # NEW: actually move the enemy to the curved x position
+
             elif (enemy.ycor()) <= -300 and enemy.isvisible():
                 enemy.hideturtle()
                 enemy.home()
